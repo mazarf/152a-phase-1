@@ -36,46 +36,107 @@ double rexp(double rate) {
  */
 class Event {
 public:
-	Event(EventType type) {
-		cout << "Event created" << endl;
+	Event(EventType type = ARRIVAL) {
 		this->type = type;
 		this->eventTime = timeElapsed + rexp(lambda);
+		this->prevEvent = NULL;
+		this->nextEvent = NULL;
 	} // constructor
-
-	// implement operators so max PQ will work
-	bool operator==(Event evt) {
-		return this->eventTime == evt.eventTime; // should i compare refs or values?
-	}
-	bool operator>=(Event evt) {
-		return this->eventTime >= evt.eventTime;
-	}
-	bool operator<=(Event evt) {
-		return this->eventTime <= evt.eventTime;
-	}
-	bool operator>(Event evt) {
-		return this->eventTime > evt.eventTime;
-	}
-	bool operator<(Event evt) {
-		return this->eventTime < evt.eventTime;
-	}
-	// end of operators
 
 	double eventTime;
 	EventType type;
 	Event * prevEvent; // why are these necessary? just use PQ
 	Event * nextEvent;
-};
+}; // Event
 
+class EventList {
+public:
+    EventList() {
+        size = 0;
+    }
 
-// GEL. Temporarily here. STL min PQ
-std::priority_queue<int> my_min_heap;
+    /*
+     * Return the topmost event, next event becomes the front
+     * If no event left, returns nullptr
+     */
+    Event *getNextEvent() {
+        Event *nextEvt = front;
+        if(front != NULL) {
+            front = front->nextEvent; // traverse
+        }
+        size--;
+        return nextEvt;
+    }
+
+    /*
+     * insert a new event in order based on time
+     * prevEvent and nextEvent members modified
+     */
+    void insertEvent(Event *evt) {
+        if(front == NULL) {
+            front = evt;
+        } else {
+            Event *curEvt = front;
+            Event *prevEvt = NULL;
+
+            // traverse until a spot is found
+            while(curEvt != NULL && curEvt->eventTime < evt->eventTime) {
+                prevEvt = curEvt;
+                curEvt = curEvt->nextEvent;
+            } // while
+
+            if(prevEvt == NULL) // front of list
+            {
+                front = evt;
+                evt->nextEvent = curEvt;
+            } else {
+                prevEvt->nextEvent = evt;
+                evt->prevEvent = prevEvt;
+                evt->nextEvent = curEvt;
+                if(curEvt != NULL) {
+                    curEvt->prevEvent = evt;
+                }
+            } // if-else
+        } // if-else
+        size++;
+    } // insert
+
+    bool empty() {
+        return size == 0;
+    } // empty
+
+    int getSize() {
+        return size;
+    }
+
+    void printList() {
+        if(front == NULL) {
+            cout << "Empty!" << endl;
+        } else {
+            Event *curEvt = front;
+            while(curEvt != NULL) {
+                cout << curEvt->eventTime << endl;
+                curEvt = curEvt->nextEvent;
+            } // while
+        } // if-else
+    } // printList
+
+private:
+    Event *front = NULL;
+    int size; // could be useful
+}; // EventList
+
 
 /*
  * Queue modeling program
  */
 int main() {
 	cout << "Hello" << endl;
-	Event evt(ARRIVAL);
-	Event evt2(ARRIVAL);
-	cout << evt.eventTime << ' ' << evt2.eventTime << endl;
+
+	EventList elist;
+	 Event evts[100];
+    for(int i = 0;i  < 100; i++) {
+        elist.insertEvent(evts + i);
+    }
+	elist.printList();
 } // main
