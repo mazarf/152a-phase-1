@@ -13,7 +13,7 @@ double packetsDropped = 0; // count of all lost packets
 double area = 0; // area under the curve, used to get average queue lengths
 
 // Constants
-const int MAXBUFFER = INT_MAX; // maximum queue size
+//const int MAXBUFFER = INT_MAX; // maximum queue size
 
 typedef enum { ARRIVAL, DEPARTURE } EventType;
 
@@ -92,7 +92,7 @@ public:
                 evt->nextEvent = curEvt;
                 if(curEvt != NULL) {
                     curEvt->prevEvent = evt;
-                }
+                } // if
             } // if-else
         } // if-else
         size++;
@@ -131,7 +131,8 @@ bool isProcessing = false; // is something being serviced?
  * deletes the old arrival event iff it is to be handled immmediately
  */
 void processArrivalEvent(Event* evt, EventList& gel, queue<Event*>& buffer,
-                         double lambda, double mu) {
+                         double lambda, double mu, int MAXBUFFER) {
+    double prevTime = timeElapsed; // used to calculate stats
     timeElapsed = evt->eventTime; // update time
     gel.insertEvent(new Event(ARRIVAL, lambda)); // new event
 
@@ -140,8 +141,8 @@ void processArrivalEvent(Event* evt, EventList& gel, queue<Event*>& buffer,
         isProcessing = true;
         delete evt; // maybe?
     } else if(buffer.size() < MAXBUFFER) {
-        buffer.push(evt); // delete later
-        // update statistics
+        buffer.push(evt); // delete event later
+        area += (timeElapsed - prevTime) * buffer.size(); // might need a +1
     } else { // buffer full, drop packet
         packetsDropped++;
         delete evt;
@@ -149,7 +150,8 @@ void processArrivalEvent(Event* evt, EventList& gel, queue<Event*>& buffer,
 } // processArrivalEvent
 
 void processServiceCompletion(Event* evt, EventList& gel, queue<Event*>& buffer,
-                              double lambda, double mu) {
+                              double lambda, double mu, int MAXBUFFER) {
+    double prevTime = timeElapsed; // used to calculate stats
     timeElapsed = evt->eventTime;
     // update stats
     if(buffer.size() == 0) {
@@ -160,18 +162,19 @@ void processServiceCompletion(Event* evt, EventList& gel, queue<Event*>& buffer,
         delete nextEvt;
         gel.insertEvent(new Event(DEPARTURE, mu));
     } // if
+    area += (timeElapsed - prevTime) * buffer.size(); // might need a +1
 } // processServiceCompletion
 
 void outputStatistics() {
     cout << "Packet loss: " << packetsDropped << endl;
+    cout << "Average queue size: " << area / timeElapsed << endl;
 } // outputStatistics
 
-/*
- * Queue modeling program
- */
-int main() {
-    double lambda = 0.1; // i don't know how to deal with these. global consts?
-	double mu = 1.0;
+void queueSim(double lambda, double mu, int MAXBUFFER) { // TODO: make maxbuffer a parameter
+    timeElapsed = 0;
+    packetsDropped = 0;
+    area = 0;           // reset global vars. TODO: make local. may be hard b/c Event uses them
+    isProcessing = false;
 
 	EventList gel; // Global Event List
 	queue<Event*> buffer; // events waiting to be processed
@@ -182,14 +185,21 @@ int main() {
         Event *evt = gel.getNextEvent();
         if(evt == NULL) { // will not happen later on
             cout << "NULL event" << endl;
-            return 1;
+            return;
         }
         if(evt->type == ARRIVAL) {
-            processArrivalEvent(evt, gel, buffer, lambda, mu);
+            processArrivalEvent(evt, gel, buffer, lambda, mu, MAXBUFFER);
         } else { // DEPARTURE
-            processServiceCompletion(evt, gel, buffer, lambda, mu);
+            processServiceCompletion(evt, gel, buffer, lambda, mu, MAXBUFFER);
         } // if-else
 	} // main loop
 
 	outputStatistics();
+} // queueSim
+
+/*
+ * Queue modeling program
+ */
+int main() {
+    queueSim(0.1, 1.0, INT_MAX);
 } // main
