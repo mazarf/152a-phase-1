@@ -2,18 +2,15 @@
 #include <cstdlib> // drand48()
 #include <cmath>   // log
 #include <climits> // INT_MAX
-#include <queue> // GEL, a min PQ
-#include <vector>
+#include <queue>
 
 using namespace std;
 
 // Global Vars
-const double lambda = 0.1; // arrival rate
-const double mu = 1.0; // service rate
 
 double timeElapsed = 0;
 double packetsDropped = 0; // count of all lost packets
-
+double area = 0; // area under the curve, used to get average queue lengths
 
 // Constants
 const int MAXBUFFER = INT_MAX; // maximum queue size
@@ -36,17 +33,17 @@ double rexp(double rate) {
  */
 class Event {
 public:
-	Event(EventType type = ARRIVAL) {
+	Event(EventType type, double rate) {
 		this->type = type;
-		this->eventTime = timeElapsed + rexp(lambda);
+		this->eventTime = timeElapsed + rexp(rate);
 		this->prevEvent = NULL;
 		this->nextEvent = NULL;
 	} // constructor
 
 	double eventTime;
 	EventType type;
-	Event * prevEvent; // why are these necessary? just use PQ
-	Event * nextEvent;
+	Event *prevEvent; // why are these necessary? just use PQ
+	Event *nextEvent;
 }; // Event
 
 class EventList {
@@ -109,16 +106,16 @@ public:
         return size;
     }
 
+    /*
+     * For debugging. Prints list times and size
+     */
     void printList() {
-        if(front == NULL) {
-            cout << "Empty!" << endl;
-        } else {
-            Event *curEvt = front;
-            while(curEvt != NULL) {
-                cout << curEvt->eventTime << endl;
-                curEvt = curEvt->nextEvent;
-            } // while
-        } // if-else
+        Event *curEvt = front;
+        while(curEvt != NULL) {
+            cout << curEvt->eventTime << endl;
+            curEvt = curEvt->nextEvent;
+        } // while
+        cout << "Size: " << size << endl;
     } // printList
 
 private:
@@ -126,17 +123,73 @@ private:
     int size; // could be useful
 }; // EventList
 
+bool isProcessing = false; // is something being serviced?
+
+/*
+ * creates new arrival packet and processes old one
+ * updates the global variable timeElapsed
+ * deletes the old arrival event iff it is to be handled immmediately
+ */
+void processArrivalEvent(Event* evt, EventList& gel, queue<Event*>& buffer,
+                         double lambda, double mu) {
+    timeElapsed = evt->eventTime; // update time
+    gel.insertEvent(new Event(ARRIVAL, lambda)); // new event
+
+    if(buffer.size() == 0 && !isProcessing) { // handle immediately
+        gel.insertEvent(new Event(DEPARTURE, mu));
+        isProcessing = true;
+        delete evt; // maybe?
+    } else if(buffer.size() < MAXBUFFER) {
+        buffer.push(evt); // delete later
+        // update statistics
+    } else { // buffer full, drop packet
+        packetsDropped++;
+        delete evt;
+    }
+} // processArrivalEvent
+
+void processServiceCompletion(Event* evt, EventList& gel, queue<Event*>& buffer,
+                              double lambda, double mu) {
+    timeElapsed = evt->eventTime;
+    // update stats
+    if(buffer.size() == 0) {
+        isProcessing = false;
+    } else {
+        Event *nextEvt = buffer.front();
+        buffer.pop();
+        delete nextEvt;
+        gel.insertEvent(new Event(DEPARTURE, mu));
+    } // if
+} // processServiceCompletion
+
+void outputStatistics() {
+    cout << "Packet loss: " << packetsDropped << endl;
+} // outputStatistics
 
 /*
  * Queue modeling program
  */
 int main() {
-	cout << "Hello" << endl;
+    double lambda = 0.1; // i don't know how to deal with these. global consts?
+	double mu = 1.0;
 
-	EventList elist;
-	 Event evts[100];
-    for(int i = 0;i  < 100; i++) {
-        elist.insertEvent(evts + i);
-    }
-	elist.printList();
+	EventList gel; // Global Event List
+	queue<Event*> buffer; // events waiting to be processed
+	Event *firstEvt = new Event(ARRIVAL, lambda);
+	gel.insertEvent(firstEvt);
+
+	for(int i = 0; i < 100000; i++) {
+        Event *evt = gel.getNextEvent();
+        if(evt == NULL) { // will not happen later on
+            cout << "NULL event" << endl;
+            return 1;
+        }
+        if(evt->type == ARRIVAL) {
+            processArrivalEvent(evt, gel, buffer, lambda, mu);
+        } else { // DEPARTURE
+            processServiceCompletion(evt, gel, buffer, lambda, mu);
+        } // if-else
+	} // main loop
+
+	outputStatistics();
 } // main
