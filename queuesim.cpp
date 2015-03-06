@@ -1,20 +1,21 @@
 #include <iostream>
 #include <cstdlib> // drand48()
-#include <cmath>   // log
+#include <cmath>   // log(), pow()
 #include <climits> // INT_MAX
-#include <queue>
+#include <cfloat> // DBL_MIN
+#include <queue> // queue
 
 using namespace std;
 
 // Global Vars
-
 double timeElapsed = 0;
 double utilizationTime = 0;
 double packetsDropped = 0; // count of all lost packets
 double area = 0; // area under the curve, used to get average queue lengths
+bool isProcessing = false; // is something being serviced?
 
 // Constants
-//const int MAXBUFFER = INT_MAX; // maximum queue size
+const bool pareto = true; // are we doing pareto distributions?
 
 typedef enum { ARRIVAL, DEPARTURE } EventType;
 
@@ -25,10 +26,18 @@ typedef enum { ARRIVAL, DEPARTURE } EventType;
 double rexp(double rate) {
 	double u;
 	u = drand48();
-	// stupid hacky way of handling switching between exponential
-	// and pareto distributions.
     return ((-1/rate)*log(1-u));
 } // rexp
+
+/*
+ * generate random pareto variable using
+ * formula from Wikipedia
+ */
+double rpareto(double rate) {
+    double u;
+	u = drand48();
+    return (1e-100)/(pow(u, 1 / rate));
+} // rpareto
 
 /*
  * Event objects hold a the type of event and the time of the event
@@ -38,7 +47,11 @@ class Event {
 public:
 	Event(EventType type, double rate) {
 		this->type = type;
-		this->eventTime = timeElapsed + rexp(rate);
+		if(pareto && type == ARRIVAL) {
+            this->eventTime = timeElapsed + rpareto(rate);
+		} else {
+            this->eventTime = timeElapsed + rexp(rate);
+        }
 		this->prevEvent = NULL;
 		this->nextEvent = NULL;
 	} // constructor
@@ -126,8 +139,6 @@ private:
     int size; // could be useful
 }; // EventList
 
-bool isProcessing = false; // is something being serviced?
-
 /*
  * creates new arrival packet and processes old one
  * updates the global variable timeElapsed
@@ -153,11 +164,7 @@ void processArrivalEvent(Event* evt, EventList& gel, queue<Event*>& buffer,
     } else { // buffer full, drop packet
         packetsDropped++;
         delete evt;
-    }
-
-
-    //cout << "A " << timeElapsed << ' ' << prevTime << ' ' << buffer.size() << ' ' << area << endl;
-
+    } // if-elseif-else
 } // processArrivalEvent
 
 void processServiceCompletion(Event* evt, EventList& gel, queue<Event*>& buffer,
@@ -177,8 +184,6 @@ void processServiceCompletion(Event* evt, EventList& gel, queue<Event*>& buffer,
     } // if
     // calculate stats
     utilizationTime += timeElapsed - prevTime;
-
-    //cout << "D " << timeElapsed << ' ' << prevTime << ' ' << buffer.size() << ' ' << area << endl;
 } // processServiceCompletion
 
 void outputStatistics(double l, double m) {
@@ -199,7 +204,7 @@ void queueSim(double lambda, double mu, int MAXBUFFER) {
 	Event *firstEvt = new Event(ARRIVAL, lambda);
 	gel.insertEvent(firstEvt);
 
-	for(int i = 0; i < 1000000; i++) {
+	for(int i = 0; i < 100000; i++) {
         Event *evt = gel.getNextEvent();
         //cout << evt->eventTime << ' ';
         if(evt == NULL) { // failsafe. should never happen
@@ -221,7 +226,31 @@ void queueSim(double lambda, double mu, int MAXBUFFER) {
  * Queue modeling program
  */
 int main() {
-    queueSim(0.9, 1.0, INT_MAX);
+    // unbounded buffer
     queueSim(0.1, 1.0, INT_MAX);
-    queueSim(1, 1.5, INT_MAX);
+    queueSim(0.25, 1.0, INT_MAX);
+    queueSim(0.4, 1.0, INT_MAX);
+    queueSim(0.55, 1.0, INT_MAX);
+    queueSim(0.65, 1.0, INT_MAX);
+    queueSim(0.80, 1.0, INT_MAX);
+    queueSim(0.90, 1.0, INT_MAX);
+
+    queueSim(0.20, 1.0, 1);
+    queueSim(0.40, 1.0, 1);
+    queueSim(0.60, 1.0, 1);
+    queueSim(0.80, 1.0, 1);
+    queueSim(0.90, 1.0, 1);
+
+    queueSim(0.20, 1.0, 20);
+    queueSim(0.40, 1.0, 20);
+    queueSim(0.60, 1.0, 20);
+    queueSim(0.80, 1.0, 20);
+    queueSim(0.90, 1.0, 20);
+
+    queueSim(0.20, 1.0, 50);
+    queueSim(0.40, 1.0, 50);
+    queueSim(0.60, 1.0, 50);
+    queueSim(0.80, 1.0, 50);
+    queueSim(0.90, 1.0, 50);
+
 } // main
